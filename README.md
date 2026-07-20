@@ -1,0 +1,137 @@
+# simdata
+
+Two-stage tool that profiles a real dataset and generates a synthetic CSV of
+arbitrary size that reproduces each column's statistical shape - and, for
+columns you name explicitly, the real values themselves in their real
+proportions. Implements Phase 1 (MVP) of
+[docs/simulated_dataset_generator_plan.md](docs/simulated_dataset_generator_plan.md).
+
+## Pipeline
+
+```
+Stage 0 (SAS)        Stage 1                  Stage 2                  Stage 3 (optional)
+sas7bdat  --------->  profile_dataset.py  -->  generate_dataset.py  -->  validate_dataset.py
+   |  PROC EXPORT           |                         |                         |
+   v                        v                         v                         v
+real.csv               profile.json  +  CLI args -> simulated.csv        comparison report
+```
+
+## Install
+
+```
+python -m venv .venv
+.venv\Scripts\activate   # or: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Everything is standard library except `numpy`, which is used narrowly for
+numeric-column arrays and the Gaussian copula (see plan Sec 13).
+
+## Stage 0: export from SAS
+
+Run `simdata/sas/export_to_csv.sas` in SAS 9.4 to produce `real.csv` from
+your `.sas7bdat` dataset.
+
+## Stage 1: profile
+
+```
+python -m simdata.profile_dataset --input real.csv --output profile.json --log-level INFO
+```
+
+Produces `profile.json`: a portable, inspectable summary of the real data
+(dtype, missing rate, min/max/mean/median/variance, percentiles, skew/
+kurtosis, frequency tables, identifier patterns, and the numeric
+cross-column correlation matrix). Review it before generating anything -
+columns logged as `free_text`/`identifier` with a WARNING are the most
+likely place to accidentally leak PII if resampled naively.
+
+**Deviation from the plan's example schema (Sec 5.2):** in addition to the
+six headline percentiles shown in the doc, each numeric/date column also
+gets an `empirical_quantiles` (or `empirical_quantiles_epoch_day`) array of
+1001 evenly-spaced quantile points. Six percentiles are too coarse a grid to
+sample a realistic distribution from at generation time; this keeps
+`profile.json` self-contained per Sec 3's design goal ("no need to keep
+re-reading the real dataset") while still supporting good empirical-CDF
+fidelity for Stage 2.
+
+## Stage 2: generate
+
+```
+python -m simdata.generate_dataset \
+  --profile profile.json \
+  --n-records 100000 \
+  --use-real-values color,state_code \
+  --real-csv real.csv \
+  --preserve-correlations true \
+  --seed 42 \
+  --output simulated.csv \
+  --log-file generate.log --log-level INFO
+```
+
+- Non-flagged numeric/date columns: empirical-CDF (inverse-transform)
+  sampling against the profiled quantile grid.
+- Non-flagged numeric columns also get correlation preservation via a
+  Gaussian copula, unless `--preserve-correlations false` or fewer than two
+  non-flagged numeric columns have a correlation entry.
+- Non-flagged categorical columns: never write real labels. Each real value
+  gets a deterministic synthetic replacement (`{col}_val1`, `{col}_val2`, ...
+  ordered by descending real frequency), sampled in the real proportions.
+  Use `--randomize-category-labels` to shuffle the label order (still
+  seeded), and `--emit-category-mapping` to write a real->synthetic lookup
+  to `<output>_category_mapping.csv` for your own QA - keep that file
+  separate from the output, since the real label names can be sensitive.
+- Identifier/free-text columns: never resampled. Generated from the
+  profiled positional pattern (e.g. `^P[0-9]{6}$`), with uniqueness enforced
+  when the real column was fully unique.
+- `--use-real-values`: bootstrap-samples literal real values in their real
+  proportions. Categorical flagged columns use the frequency table already
+  in `profile.json`; every other dtype needs `--real-csv` to re-read raw
+  values (profile.json doesn't retain full raw value lists for non-categorical
+  columns).
+
+## Stage 3: validate (optional but recommended)
+
+```
+python -m simdata.validate_dataset --profile profile.json --simulated simulated.csv --report report.json
+```
+
+Re-profiles `simulated.csv` and prints/logs a side-by-side diff against
+`profile.json`, including a correlation-matrix diff - the main check that
+the copula step actually preserved cross-column relationships.
+
+## Layout
+
+```
+simdata/
+  log_config.py        # shared logging setup
+  mathutils.py          # erf / inverse-normal-CDF / rank helpers (no scipy)
+  profile_dataset.py     # Stage 1 CLI
+  generate_dataset.py    # Stage 2 CLI
+  validate_dataset.py    # Stage 3 CLI
+  profiling/
+    classify.py           # column type/cardinality classification
+    stats.py                # stats + correlation matrix
+    patterns.py              # positional pattern inference for identifiers
+  generation/
+    numeric.py               # empirical-CDF interpolation sampler
+    categorical.py             # synthetic-label frequency-weighted sampler
+    identifiers.py              # pattern-based + uniqueness-enforced generator
+    dates.py                     # empirical-CDF sampling on epoch-day
+    copula.py                     # numpy-backed Cholesky + Gaussian copula
+    flagged.py                     # --use-real-values bootstrap sampling
+    missingness.py                  # per-column missing-value injector
+  sas/
+    export_to_csv.sas                # Stage 0 PROC EXPORT script
+  tests/
+```
+
+## Known limitations (deferred per the plan's phasing, Sec 10)
+
+- Missingness is injected independently per column; joint/co-missingness
+  patterns aren't modeled (Phase 2).
+- Date columns don't re-weight for weekday/month seasonality (Phase 2).
+- No config-file input or per-column strategy overrides (Phase 3).
+- Both profiling and generation currently load full columns into memory
+  (numpy arrays for numeric columns, Python lists otherwise) rather than
+  streaming in chunks; fine well past 500K rows on typical hardware, but see
+  plan Sec 13 if you outgrow it.
