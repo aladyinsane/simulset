@@ -1,7 +1,7 @@
 """Stage 1: profile a real (CSV-exported) dataset into a portable profile.json.
 
 Usage:
-    python -m simdata.profile_dataset --input real.csv --output profile.json \
+    python -m simulset.profile_dataset --input real.csv --output profile.json \
         --log-file profile.log --log-level INFO
 """
 
@@ -24,8 +24,10 @@ log = logging.getLogger(__name__)
 PROFILER_VERSION = "1.0"
 
 
-def read_csv_columns(path: str) -> Tuple[List[str], Dict[str, List[Optional[str]]], int]:
-    with open(path, newline="", encoding="utf-8-sig") as f:
+def read_csv_columns(
+    path: str, encoding: str = "utf-8-sig"
+) -> Tuple[List[str], Dict[str, List[Optional[str]]], int]:
+    with open(path, newline="", encoding=encoding) as f:
         reader = csv.reader(f)
         try:
             header = next(reader)
@@ -109,8 +111,13 @@ def profile_columns(
     return profile, correlation_matrix
 
 
-def build_profile(input_path: str, categorical_max_unique: int, categorical_max_ratio: float) -> Dict:
-    header, columns, row_count = read_csv_columns(input_path)
+def build_profile(
+    input_path: str,
+    categorical_max_unique: int,
+    categorical_max_ratio: float,
+    encoding: str = "utf-8-sig",
+) -> Dict:
+    header, columns, row_count = read_csv_columns(input_path, encoding)
     log.info("Read %d rows x %d columns from %s", row_count, len(header), input_path)
 
     columns_profile, correlation_matrix = profile_columns(
@@ -136,6 +143,11 @@ def build_profile(input_path: str, categorical_max_unique: int, categorical_max_
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Profile a real dataset into profile.json")
     parser.add_argument("--input", required=True, help="Path to the real dataset CSV")
+    parser.add_argument("--input-encoding", default="utf-8-sig",
+                         help="Encoding of --input (default utf-8-sig). SAS PROC EXPORT's output "
+                              "encoding matches the SAS session encoding, not utf-8 - check yours "
+                              "(e.g. many Windows SAS installs default to cp1252) and pass it here "
+                              "if it differs from the default")
     parser.add_argument("--output", required=True, help="Path to write profile.json")
     parser.add_argument("--categorical-max-unique", type=int, default=50,
                          help="Max distinct values for a string column to be categorical (default 50)")
@@ -153,7 +165,9 @@ def main(argv=None) -> int:
     t0 = time.time()
 
     try:
-        profile = build_profile(args.input, args.categorical_max_unique, args.categorical_max_ratio)
+        profile = build_profile(
+            args.input, args.categorical_max_unique, args.categorical_max_ratio, args.input_encoding
+        )
     except (OSError, ValueError) as exc:
         log.error("Failed to profile %s: %s", args.input, exc)
         return 1

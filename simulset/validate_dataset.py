@@ -4,7 +4,7 @@ and a correlation-matrix diff, which is the main check that Sec 6.3's
 copula step actually worked.
 
 Usage:
-    python -m simdata.validate_dataset --profile profile.json \
+    python -m simulset.validate_dataset --profile profile.json \
         --simulated simulated.csv --report report.json \
         --log-file validate.log --log-level INFO
 """

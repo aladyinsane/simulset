@@ -1,4 +1,4 @@
-# simdata
+# simulset
 
 Two-stage tool that profiles a real dataset and generates a synthetic CSV of
 arbitrary size that reproduces each column's statistical shape - and, for
@@ -27,15 +27,26 @@ pip install -r requirements.txt
 Everything is standard library except `numpy`, which is used narrowly for
 numeric-column arrays and the Gaussian copula (see plan Sec 13).
 
+Some deployments don't need this step at all (e.g. a locked-down environment
+where `numpy` is already provided globally) - see
+[docs/environment-notes.md](docs/environment-notes.md) for per-environment
+specifics.
+
 ## Stage 0: export from SAS
 
-Run `simdata/sas/export_to_csv.sas` in SAS 9.4 to produce `real.csv` from
+Run `simulset/sas/export_to_csv.sas` in SAS 9.4 to produce `real.csv` from
 your `.sas7bdat` dataset.
+
+`PROC EXPORT` writes the CSV in your SAS session's encoding, not utf-8 -
+check `%put &sysencoding;` if unsure. Both `profile_dataset.py` (`--input`)
+and `generate_dataset.py` (`--real-csv`) default to reading `utf-8-sig`, but
+accept `--input-encoding` to override it (e.g. `--input-encoding cp1252`,
+common on Windows SAS installs).
 
 ## Stage 1: profile
 
 ```
-python -m simdata.profile_dataset --input real.csv --output profile.json --log-level INFO
+python -m simulset.profile_dataset --input real.csv --output profile.json --log-level INFO
 ```
 
 Produces `profile.json`: a portable, inspectable summary of the real data
@@ -57,7 +68,7 @@ fidelity for Stage 2.
 ## Stage 2: generate
 
 ```
-python -m simdata.generate_dataset \
+python -m simulset.generate_dataset \
   --profile profile.json \
   --n-records 100000 \
   --use-real-values color,state_code \
@@ -92,7 +103,7 @@ python -m simdata.generate_dataset \
 ## Stage 3: validate (optional but recommended)
 
 ```
-python -m simdata.validate_dataset --profile profile.json --simulated simulated.csv --report report.json
+python -m simulset.validate_dataset --profile profile.json --simulated simulated.csv --report report.json
 ```
 
 Re-profiles `simulated.csv` and prints/logs a side-by-side diff against
@@ -102,7 +113,7 @@ the copula step actually preserved cross-column relationships.
 ## Layout
 
 ```
-simdata/
+simulset/
   log_config.py        # shared logging setup
   mathutils.py          # erf / inverse-normal-CDF / rank helpers (no scipy)
   profile_dataset.py     # Stage 1 CLI
