@@ -299,7 +299,7 @@ helper (`log_config.py`):
 ## 9. Suggested File Structure
 
 ```
-simdata/
+simulset/
   log_config.py          # shared logging setup
   profile_dataset.py      # Stage 1 CLI entry point
   generate_dataset.py     # Stage 2 CLI entry point

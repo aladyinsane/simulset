@@ -1,7 +1,7 @@
 """Stage 2: generate a synthetic CSV from profile.json (Sec 6).
 
 Usage:
-    python -m simdata.generate_dataset \
+    python -m simulset.generate_dataset \
         --profile profile.json --n-records 100000 \
         --use-real-values color,state_code --real-csv real.csv \
         --preserve-correlations true --seed 42 \
@@ -40,9 +40,11 @@ def _str2bool(value: str) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-def read_columns_from_csv(path: str, wanted_columns: List[str]) -> Dict[str, List[str]]:
+def read_columns_from_csv(
+    path: str, wanted_columns: List[str], encoding: str = "utf-8-sig"
+) -> Dict[str, List[str]]:
     result: Dict[str, List[str]] = {c: [] for c in wanted_columns}
-    with open(path, newline="", encoding="utf-8-sig") as f:
+    with open(path, newline="", encoding=encoding) as f:
         reader = csv.DictReader(f)
         missing_cols = set(wanted_columns) - set(reader.fieldnames or [])
         if missing_cols:
@@ -90,6 +92,11 @@ def parse_args(argv=None) -> argparse.Namespace:
                          help="Comma-separated columns to bootstrap-sample literal real values for")
     parser.add_argument("--real-csv", default=None,
                          help="Path to the real CSV; required if a non-categorical column is in --use-real-values")
+    parser.add_argument("--input-encoding", default="utf-8-sig",
+                         help="Encoding of --real-csv (default utf-8-sig). SAS PROC EXPORT's output "
+                              "encoding matches the SAS session encoding, not utf-8 - check yours "
+                              "(e.g. many Windows SAS installs default to cp1252) and pass it here "
+                              "if it differs from the default")
     parser.add_argument("--preserve-correlations", default="true",
                          help="true/false - use the Gaussian copula to preserve numeric cross-column correlation")
     parser.add_argument("--randomize-category-labels", action="store_true",
@@ -140,7 +147,7 @@ def main(argv=None) -> int:
             )
             return 1
         try:
-            real_raw = read_columns_from_csv(args.real_csv, needs_raw_csv)
+            real_raw = read_columns_from_csv(args.real_csv, needs_raw_csv, args.input_encoding)
         except (OSError, ValueError) as exc:
             log.error("Failed to read --real-csv for flagged columns: %s", exc)
             return 1
