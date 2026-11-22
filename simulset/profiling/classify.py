@@ -77,11 +77,34 @@ class ColumnClassification:
     non_null_values: List[str] = field(default_factory=list)
 
 
+# distinct / non-missing at or above this makes an all-digit column a
+# pattern-generated identifier rather than a categorical code.
+NEAR_UNIQUE_RATIO = 0.95
+# Same-length all-digit columns this long or longer are codes, not numbers.
+MIN_FIXED_CODE_LENGTH = 5
+
+
+def integer_code_reason(values: List[str]) -> Optional[str]:
+    """If `values` (non-missing, trimmed) is an integer-formatted ID/code column,
+    return why; otherwise None. Decimals, negatives and short variable-length
+    numbers return None and stay numeric."""
+    if not values or not all(v.isascii() and v.isdigit() for v in values):
+        return None
+    if any(len(v) > 1 and v.startswith("0") for v in values):
+        return "has leading zeros"
+    if len({len(v) for v in values}) == 1 and len(values[0]) >= MIN_FIXED_CODE_LENGTH:
+        return f"all values are {len(values[0])} digits long"
+    if len(set(values)) / len(values) >= NEAR_UNIQUE_RATIO:
+        return "values are almost all distinct"
+    return None
+
+
 def classify_column(
     name: str,
     raw_values: List[Optional[str]],
     categorical_max_unique: int = 50,
     categorical_max_ratio: float = 0.05,
+    force_numeric: bool = False,
 ) -> ColumnClassification:
     non_null = [v for v in raw_values if not is_missing(v)]
     n_non_null = len(non_null)
@@ -89,6 +112,25 @@ def classify_column(
     if n_non_null == 0:
         log.warning("%s: column is entirely missing/empty; defaulting to numeric/float", name)
         return ColumnClassification(dtype=NUMERIC, subtype="float", n_non_null=0)
+
+    if not force_numeric:
+        trimmed = [v.strip() for v in non_null]
+        reason = integer_code_reason(trimmed)
+        if reason:
+            n_unique = len(set(trimmed))
+            ratio = n_unique / n_non_null
+            dtype = IDENTIFIER if ratio >= NEAR_UNIQUE_RATIO else CATEGORICAL
+            log.warning(
+                "%s: all-digit column (%s); classified as %s instead of numeric so "
+                "real values are not reproduced. If this is a real number column, "
+                "re-run profiling with --treat-as-number %s.",
+                name, reason, dtype, name,
+            )
+            return ColumnClassification(
+                dtype=dtype, n_non_null=n_non_null, n_unique=n_unique,
+                cardinality_ratio=ratio, is_fully_unique=n_unique == n_non_null,
+                non_null_values=trimmed,
+            )
 
     numeric_hits = sum(1 for v in non_null if try_parse_number(v) is not None)
     if numeric_hits / n_non_null >= PARSE_THRESHOLD:

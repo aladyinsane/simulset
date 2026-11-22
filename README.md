@@ -49,6 +49,24 @@ common on Windows SAS installs).
 python -m simulset.profile_dataset --input real.csv --output profile.json --log-level INFO
 ```
 
+Column types, in the order they are checked:
+
+- **All-digit ID/code columns** (every non-missing value, trimmed, is only
+  digits) are never numeric when at least one of these holds: some value has a
+  leading zero; every value has the same length and it is 5 or more; distinct
+  values are 95% or more of the non-missing values. If distinct/non-missing is
+  0.95 or more the column is `identifier` (pattern-generated, never equal to a
+  real value). Otherwise it is `categorical` (ZIP-like codes): output uses
+  masked labels `{col}_valN` in the real proportions, however many distinct
+  values there are. Values stay strings so leading zeros survive. Each such
+  column logs a WARNING with its new type and the reason. Decimals, negatives
+  and variable-length short numbers (counts, ages, amounts) stay numeric.
+- Then numeric, date, categorical, identifier, free_text as before.
+
+If the rule catches a real number column by mistake (for example whole-dollar
+amounts that are almost all distinct), keep it numeric with
+`--treat-as-number col_a,col_b`.
+
 Produces `profile.json`: a portable, inspectable summary of the real data
 (dtype, missing rate, min/max/mean/median/variance, percentiles, skew/
 kurtosis, frequency tables, identifier patterns, and the numeric
@@ -94,6 +112,14 @@ python -m simulset.generate_dataset \
 - Identifier/free-text columns: never resampled. Generated from the
   profiled positional pattern (e.g. `^P[0-9]{6}$`), with uniqueness enforced
   when the real column was fully unique.
+- With `--real-csv`, identifier and free_text generation rejects any candidate
+  equal to a real value of that column (compared after trimming whitespace).
+  The real values are read from `--real-csv` only; they are never written to
+  `profile.json` or the logs (logs carry counts only). If a pattern space is
+  filled by real values, the value gets an `x<n>` suffix rather than match a
+  real one, with a WARNING. Without `--real-csv` there is one WARNING per
+  identifier/free_text column: collisions with real values were not prevented,
+  so run the leak check before using the output.
 - `--use-real-values`: bootstrap-samples literal real values in their real
   proportions. Categorical flagged columns use the frequency table already
   in `profile.json`; every other dtype needs `--real-csv` to re-read raw

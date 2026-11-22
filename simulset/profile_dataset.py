@@ -62,7 +62,11 @@ def profile_columns(
     row_count: int,
     categorical_max_unique: int = 50,
     categorical_max_ratio: float = 0.05,
+    treat_as_number: Optional[set] = None,
 ) -> Tuple[Dict[str, Dict], Optional[Dict]]:
+    treat_as_number = treat_as_number or set()
+    for c in sorted(treat_as_number - set(header)):
+        log.warning("--treat-as-number column '%s' not found in the input header", c)
     profile: Dict[str, Dict] = {}
     numeric_aligned: Dict[str, List[Optional[float]]] = {}
 
@@ -72,6 +76,7 @@ def profile_columns(
             name, raw_values,
             categorical_max_unique=categorical_max_unique,
             categorical_max_ratio=categorical_max_ratio,
+            force_numeric=name in treat_as_number,
         )
         missing_rate = 1.0 - (cls.n_non_null / row_count) if row_count else 0.0
 
@@ -116,12 +121,14 @@ def build_profile(
     categorical_max_unique: int,
     categorical_max_ratio: float,
     encoding: str = "utf-8-sig",
+    treat_as_number: Optional[set] = None,
 ) -> Dict:
     header, columns, row_count = read_csv_columns(input_path, encoding)
     log.info("Read %d rows x %d columns from %s", row_count, len(header), input_path)
 
     columns_profile, correlation_matrix = profile_columns(
-        header, columns, row_count, categorical_max_unique, categorical_max_ratio
+        header, columns, row_count, categorical_max_unique, categorical_max_ratio,
+        treat_as_number,
     )
 
     profile = {
@@ -153,6 +160,9 @@ def parse_args(argv=None) -> argparse.Namespace:
                          help="Max distinct values for a string column to be categorical (default 50)")
     parser.add_argument("--categorical-max-ratio", type=float, default=0.05,
                          help="Max unique/non-null ratio for a string column to be categorical (default 0.05)")
+    parser.add_argument("--treat-as-number", default="",
+                         help="Comma-separated columns to keep numeric even if all their values are "
+                              "digits (for a real number column the all-digit ID/code rule catches by mistake)")
     parser.add_argument("--log-file", default=None)
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args(argv)
@@ -166,7 +176,8 @@ def main(argv=None) -> int:
 
     try:
         profile = build_profile(
-            args.input, args.categorical_max_unique, args.categorical_max_ratio, args.input_encoding
+            args.input, args.categorical_max_unique, args.categorical_max_ratio, args.input_encoding,
+            {c.strip() for c in args.treat_as_number.split(",") if c.strip()},
         )
     except (OSError, ValueError) as exc:
         log.error("Failed to profile %s: %s", args.input, exc)
