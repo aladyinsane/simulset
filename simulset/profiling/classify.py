@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional, Tuple
@@ -18,7 +19,7 @@ EMPTY = "empty"  # every value missing
 
 # Sentinels commonly used for "missing" in CSVs exported from SAS (which uses "."
 # for a missing numeric value) and other common conventions.
-MISSING_MARKERS = {"", "na", "n/a", "null", "none", ".", "nan"}
+MISSING_MARKERS = {"", "na", "n/a", "null", "none", ".", "nan", "-nan", "+nan"}
 
 DATE_FORMATS = [
     "%Y-%m-%d",
@@ -44,9 +45,12 @@ def is_missing(raw: Optional[str]) -> bool:
 
 def try_parse_number(raw: str) -> Optional[float]:
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
         return None
+    # NaN and infinity (nan, inf, 1e999) are not usable numbers; treating them as
+    # unparseable keeps them out of int conversion and the stats.
+    return value if math.isfinite(value) else None
 
 
 def looks_like_int(raw: str) -> bool:

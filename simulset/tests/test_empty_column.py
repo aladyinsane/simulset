@@ -155,5 +155,64 @@ class TestNanMarker(unittest.TestCase):
         self.assertTrue(out.getvalue().rstrip().endswith("LEAK CHECK: PASS"))
 
 
+class TestNonFiniteValues(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+
+    def p(self, name):
+        return os.path.join(self.tmp.name, name)
+
+    def _write(self, int_extra, float_extra):
+        rng = random.Random(6)
+        rows = []
+        for i in range(500):
+            n_int = rng.randint(1, 300)
+            n_float = f"{rng.uniform(1, 50):.2f}"
+            if i < len(int_extra):
+                n_int = int_extra[i]
+            if i < len(float_extra):
+                n_float = float_extra[i]
+            rows.append([i, n_int, n_float])
+        with open(self.p("real.csv"), "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["row", "count", "amount"])
+            w.writerows(rows)
+
+    def _run(self):
+        self.assertEqual(profile_dataset.main(
+            ["--input", self.p("real.csv"), "--output", self.p("profile.json")]), 0)
+        self.assertEqual(generate_dataset.main([
+            "--profile", self.p("profile.json"), "--n-records", "300", "--seed", "1",
+            "--output", self.p("sim.csv"),
+        ]), 0)
+        with open(self.p("profile.json"), encoding="utf-8") as f:
+            profile_text = f.read()
+        with open(self.p("sim.csv"), encoding="utf-8") as f:
+            sim_text = f.read().lower()
+        return json.loads(profile_text), profile_text, sim_text
+
+    def test_signed_nan_in_integer_and_float_columns(self):
+        self._write(["-nan", "+nan", "-NaN"] * 2, ["-nan", "+nan", "-NaN"] * 3)
+        profile, profile_text, sim_text = self._run()
+        self.assertEqual(profile["columns"]["count"]["dtype"], "numeric")
+        self.assertEqual(profile["columns"]["amount"]["dtype"], "numeric")
+        self.assertAlmostEqual(profile["columns"]["count"]["missing_rate"], 6 / 500)
+        self.assertAlmostEqual(profile["columns"]["amount"]["missing_rate"], 9 / 500)
+        self.assertNotIn("nan", profile_text.lower())
+        self.assertNotIn("nan", sim_text)
+
+    def test_infinity_does_not_crash_or_reach_output(self):
+        self.assertIsNone(classify.try_parse_number("inf"))
+        self.assertIsNone(classify.try_parse_number("-Infinity"))
+        self.assertIsNone(classify.try_parse_number("1e999"))
+        self._write(["inf", "-inf", "Infinity", "1e999"], ["inf", "1e999", "-inf"])
+        profile, profile_text, sim_text = self._run()
+        self.assertEqual(profile["columns"]["count"]["dtype"], "numeric")
+        self.assertEqual(profile["columns"]["amount"]["dtype"], "numeric")
+        self.assertNotIn("inf", profile_text.lower())
+        self.assertNotIn("inf", sim_text)
+
+
 if __name__ == "__main__":
     unittest.main()
