@@ -80,7 +80,10 @@ def profile_columns(
         )
         missing_rate = 1.0 - (cls.n_non_null / row_count) if row_count else 0.0
 
-        if cls.dtype == classify.NUMERIC:
+        if cls.dtype == classify.EMPTY:
+            col_stats = {"dtype": "empty"}
+            missing_rate = 1.0
+        elif cls.dtype == classify.NUMERIC:
             parsed = [classify.try_parse_number(v) for v in cls.non_null_values]
             col_stats = stats.numeric_stats(name, parsed, cls.non_null_values)
             col_stats["subtype"] = cls.subtype

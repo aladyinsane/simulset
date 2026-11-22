@@ -64,6 +64,10 @@ Column types, in the order they are checked:
   values there are. Values stay strings so leading zeros survive. Each such
   column logs a WARNING with its new type and the reason. Decimals, negatives
   and variable-length short numbers with plenty of repeats (counts, ages) stay numeric.
+- A column where every value is missing (blank, `NA`, `N/A`, `null`, `None`, `.`,
+  any case) is `empty`: the profile records only `dtype` and `missing_rate` 1.0,
+  generation writes it as all blanks (even if named in `--use-real-values`), and
+  validate and the leak check handle it (nothing to match). A WARNING names it.
 - Then numeric, date, categorical, identifier, free_text as before.
 
 Whole-dollar amounts that are almost all distinct (95% or more) also become
