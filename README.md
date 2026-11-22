@@ -54,18 +54,22 @@ Column types, in the order they are checked:
 - **All-digit ID/code columns** (every non-missing value, trimmed, is only
   digits) are never numeric when at least one of these holds: some value has a
   leading zero; every value has the same length and it is 5 or more; distinct
-  values are 95% or more of the non-missing values. If distinct/non-missing is
+  values are 95% or more of the non-missing values (this last test only applies
+  with at least 50 non-missing values). At least 98% of values must be all
+  digits, so a few dirty values (`UNKNOWN`, `-1`, ZIP+4) do not switch the rule
+  off. If distinct/non-missing is
   0.95 or more the column is `identifier` (pattern-generated, never equal to a
   real value). Otherwise it is `categorical` (ZIP-like codes): output uses
   masked labels `{col}_valN` in the real proportions, however many distinct
   values there are. Values stay strings so leading zeros survive. Each such
   column logs a WARNING with its new type and the reason. Decimals, negatives
-  and variable-length short numbers (counts, ages, amounts) stay numeric.
+  and variable-length short numbers with plenty of repeats (counts, ages) stay numeric.
 - Then numeric, date, categorical, identifier, free_text as before.
 
-If the rule catches a real number column by mistake (for example whole-dollar
-amounts that are almost all distinct), keep it numeric with
-`--treat-as-number col_a,col_b`.
+Whole-dollar amounts that are almost all distinct (95% or more) also become
+`identifier`: that is the safe default, because the profile cannot tell them from
+IDs. If the column is really a number, keep it numeric with
+`--treat-as-number col_a,col_b`. Repeating amounts stay numeric.
 
 Produces `profile.json`: a portable, inspectable summary of the real data
 (dtype, missing rate, min/max/mean/median/variance, percentiles, skew/

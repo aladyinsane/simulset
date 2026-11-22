@@ -51,9 +51,33 @@ class TestIntegerCodeClassification(unittest.TestCase):
         rng = random.Random(1)
         counts = [str(rng.randint(0, 9)) for _ in range(500)]
         ages = [str(rng.randint(18, 90)) for _ in range(500)]
-        amounts = [str(rng.randint(1, 20000)) for _ in range(2000)]
+        amounts = [str(rng.randint(1, 2000)) for _ in range(2000)]  # about 63% distinct
         for name, vals in (("count", counts), ("age", ages), ("amount", amounts)):
             self.assertEqual(classify.classify_column(name, vals).dtype, classify.NUMERIC, name)
+
+    def test_tiny_tables_stay_numeric(self):
+        ages = [str(a) for a in (31, 45, 27, 52, 38, 64, 29, 41, 57, 33, 48, 36, 25, 61, 44, 39, 50, 28, 35, 42)]
+        self.assertEqual(len(set(ages)), 20)
+        self.assertEqual(classify.classify_column("age", ages).dtype, classify.NUMERIC)
+
+    def test_near_unique_amounts_are_identifier_unless_treated_as_number(self):
+        amounts = [str(a) for a in random.Random(5).sample(range(1, 100000), 1000)]
+        self.assertEqual(classify.classify_column("amount", amounts).dtype, classify.IDENTIFIER)
+        self.assertEqual(classify.classify_column("amount", amounts, force_numeric=True).dtype,
+                         classify.NUMERIC)
+
+    def test_dirty_value_in_id_column_keeps_identifier(self):
+        ids = [f"{i:09d}" for i in range(1, 400, 2)] + ["UNKNOWN"]
+        cls = classify.classify_column("id", ids)
+        self.assertEqual(cls.dtype, classify.IDENTIFIER)
+        self.assertNotIn("UNKNOWN", cls.non_null_values)
+        self.assertTrue(all(len(v) == 9 for v in cls.non_null_values))
+
+    def test_zip_plus_four_in_zip_column_keeps_categorical(self):
+        zips = ["02134", "10001", "60601"] * 100 + ["10001-1234"]
+        cls = classify.classify_column("zip", zips)
+        self.assertEqual(cls.dtype, classify.CATEGORICAL)
+        self.assertIn("02134", cls.non_null_values)
 
     def test_decimals_and_negatives_stay_numeric(self):
         self.assertEqual(classify.classify_column("x", ["12345.5", "23456.5", "12345.5"]).dtype,
@@ -119,6 +143,18 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(cols["age"]["dtype"], "numeric")
         self.assertEqual(cols["amount"]["dtype"], "numeric")
 
+    def test_leading_zeros_survive_in_generated_output(self):
+        rows = self._real_file()
+        self.assertTrue(any(r[0].startswith("0") for r in rows))
+        self._profile()
+        generate_dataset.main([
+            "--profile", self.p("profile.json"), "--n-records", "2000", "--seed", "1",
+            "--real-csv", self.p("real.csv"), "--output", self.p("sim.csv"),
+        ])
+        out = _read_col(self.p("sim.csv"), "member_id")
+        self.assertTrue(all(len(v) == 8 and v.isdigit() for v in out))
+        self.assertTrue(any(v.startswith("0") for v in out))
+
     def test_treat_as_number_cli(self):
         self._real_file()
         cols = self._profile(["--treat-as-number", "member_id,zip"])
@@ -161,6 +197,17 @@ class TestEndToEnd(unittest.TestCase):
         out = identifiers.generate("code", prof, 500, random.Random(2))
         self.assertTrue(set(out) & real)
 
+    def test_debug_log_has_no_identifier_samples(self):
+        self._small_space_file()
+        self._profile()
+        generate_dataset.main([
+            "--profile", self.p("profile.json"), "--n-records", "50", "--seed", "2",
+            "--output", self.p("sim.csv"),
+            "--log-file", self.p("gen.log"), "--log-level", "DEBUG",
+        ])
+        with open(self.p("gen.log"), encoding="utf-8") as f:
+            self.assertNotIn("sample=", f.read())
+
     def test_real_values_not_in_profile_or_log(self):
         self._small_space_file()
         self._profile()
@@ -186,9 +233,9 @@ class TestEndToEnd(unittest.TestCase):
                 "--profile", self.p("profile.json"), "--n-records", "20", "--seed", "2",
                 "--output", self.p("sim.csv"),
             ])
-        text = "\n".join(cm.output)
-        self.assertIn("code", text)
-        self.assertIn("not prevented", text)
+        hits = [m for m in cm.output if "not prevented" in m]
+        self.assertEqual(len(hits), 1)
+        self.assertIn("code", hits[0])
 
 
 if __name__ == "__main__":

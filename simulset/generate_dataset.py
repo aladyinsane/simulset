@@ -255,7 +255,8 @@ def main(argv=None) -> int:
             strategy = "pattern-generated"
 
         log.info("%s: strategy=%s", col, strategy)
-        log.debug("%s: sample=%s", col, values[:5])
+        if dtype not in ("identifier", "free_text"):  # without --real-csv these could be real values
+            log.debug("%s: sample=%s", col, values[:5])
 
         values = missingness.inject(values, col_profile.get("missing_rate", 0.0), py_rng)
         generated[col] = values

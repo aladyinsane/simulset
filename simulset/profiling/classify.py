@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -84,18 +84,26 @@ NEAR_UNIQUE_RATIO = 0.95
 MIN_FIXED_CODE_LENGTH = 5
 
 
-def integer_code_reason(values: List[str]) -> Optional[str]:
+# The distinct-ratio rule needs enough rows to mean anything: in a tiny table
+# every count or age is "unique".
+MIN_ROWS_FOR_RATIO_RULE = 50
+
+
+def integer_code_reason(values: List[str]) -> Optional[Tuple[str, List[str]]]:
     """If `values` (non-missing, trimmed) is an integer-formatted ID/code column,
-    return why; otherwise None. Decimals, negatives and short variable-length
-    numbers return None and stay numeric."""
-    if not values or not all(v.isascii() and v.isdigit() for v in values):
+    return (reason, the all-digit values); otherwise None. At least
+    PARSE_THRESHOLD of the values must be all digits, so a few dirty values
+    (UNKNOWN, -1, ZIP+4) do not turn the rule off. Decimals, negatives and
+    short variable-length numbers stay numeric."""
+    digits = [v for v in values if v.isascii() and v.isdigit()]
+    if not values or len(digits) / len(values) < PARSE_THRESHOLD:
         return None
-    if any(len(v) > 1 and v.startswith("0") for v in values):
-        return "has leading zeros"
-    if len({len(v) for v in values}) == 1 and len(values[0]) >= MIN_FIXED_CODE_LENGTH:
-        return f"all values are {len(values[0])} digits long"
-    if len(set(values)) / len(values) >= NEAR_UNIQUE_RATIO:
-        return "values are almost all distinct"
+    if any(len(v) > 1 and v.startswith("0") for v in digits):
+        return "has leading zeros", digits
+    if len({len(v) for v in digits}) == 1 and len(digits[0]) >= MIN_FIXED_CODE_LENGTH:
+        return f"all digit values are {len(digits[0])} digits long", digits
+    if len(values) >= MIN_ROWS_FOR_RATIO_RULE and len(set(values)) / len(values) >= NEAR_UNIQUE_RATIO:
+        return "values are almost all distinct", digits
     return None
 
 
@@ -115,8 +123,9 @@ def classify_column(
 
     if not force_numeric:
         trimmed = [v.strip() for v in non_null]
-        reason = integer_code_reason(trimmed)
-        if reason:
+        found = integer_code_reason(trimmed)
+        if found:
+            reason, digit_values = found
             n_unique = len(set(trimmed))
             ratio = n_unique / n_non_null
             dtype = IDENTIFIER if ratio >= NEAR_UNIQUE_RATIO else CATEGORICAL
@@ -129,7 +138,8 @@ def classify_column(
             return ColumnClassification(
                 dtype=dtype, n_non_null=n_non_null, n_unique=n_unique,
                 cardinality_ratio=ratio, is_fully_unique=n_unique == n_non_null,
-                non_null_values=trimmed,
+                # Identifier patterns come from the digit values only.
+                non_null_values=digit_values if dtype == IDENTIFIER else trimmed,
             )
 
     numeric_hits = sum(1 for v in non_null if try_parse_number(v) is not None)
