@@ -147,24 +147,37 @@ holds no real value:
 
 ```
 python -m simulset.validate_dataset --profile profile.json --simulated simulated.csv \
-  --real-csv real.csv --allow-real-values state_code --leak-check-columns amount \
+  --real-csv real.csv --allow-real-values state_code --leak-check-columns provider_code \
   --report report.json --log-file validate.log
 ```
 
 For every column the profile classifies as identifier, free_text or categorical,
 plus any named in `--leak-check-columns`, it counts simulated values equal to a
-real value in that column (string compare after trimming). `--allow-real-values`
-lists columns where that is expected (for example ones you passed to
-`generate_dataset --use-real-values`). `--input-encoding` works as in the other
-stages. Only counts are printed, logged and written to the `leak_check` section
-of `report.json`: column, number checked, number matching, whether allowed. The
-last line is `LEAK CHECK: PASS` or `LEAK CHECK: FAIL (n columns)`, and the exit
-code is 1 on a fail. A named column missing from the profile or either CSV is an
-error. Without `--real-csv`, validate behaves as before.
+real value in that column. Matching is strict, on the safe side: it ignores case
+and surrounding spaces, and for all-digit values also leading zeros, so
+`12345678` matches a real `012345678`. A false match only means you generate
+again.
 
-Because the output may be pasted elsewhere, when `--real-csv` is given the stats
-diff leaves out `min`, `max` and `median` (they are literal values), and the
-profiler's DEBUG stats line is kept out of the log.
+- A column in both CSVs that the profile does not have is checked too.
+- A simulated column that is not in `real.csv` cannot be checked, so it counts
+  as a failing column ("not in real.csv, not checked") unless listed in
+  `--allow-real-values`.
+- `--leak-check-columns` is for ID or code columns that simulset left numeric
+  (for example after `--treat-as-number`). Do not name measure columns such as
+  amounts: they match real values by chance and the check would fail.
+- `--allow-real-values` lists columns where a match is expected (for example ones
+  you passed to `generate_dataset --use-real-values`).
+- `--input-encoding` works as in the other stages.
+
+Only counts are printed, logged and written to the `leak_check` section of
+`report.json`: column, number checked, number matching, whether allowed. The last
+line is `LEAK CHECK: PASS` or `LEAK CHECK: FAIL (n columns)`, and the exit code is
+1 on a fail. A named column missing from the profile or the CSVs is an error.
+
+Only output from a run with `--real-csv` is safe to paste anywhere. In that mode
+the stats diff leaves out `min`, `max` and `median` (literal values) and the
+profiler's DEBUG stats line stays out of the log. Without `--real-csv`, validate
+still prints real min, max and median and logs real labels, as before.
 
 ## Layout
 

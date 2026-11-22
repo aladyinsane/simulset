@@ -15,6 +15,7 @@ equal a real value. Only counts are ever printed, logged or reported.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import logging
 import sys
@@ -134,6 +135,26 @@ def build_report(real_profile: Dict, sim_profile: Dict, redact_values: bool = Fa
     }
 
 
+def read_header(path: str, encoding: str = "utf-8-sig") -> List[str]:
+    with open(path, newline="", encoding=encoding) as f:
+        try:
+            return next(csv.reader(f))
+        except StopIteration:
+            raise ValueError(f"{path}: file is empty, no header row found")
+
+
+def match_keys(value: str) -> List[str]:
+    """Forms a value is compared in: trimmed and case-folded; all-digit values
+    also with leading zeros stripped, so 12345678 matches 012345678."""
+    v = value.strip().casefold()
+    if v.isascii() and v.isdigit():
+        return [v, v.lstrip("0") or "0"]
+    return [v]
+
+
+NOT_CHECKED = "not in real.csv, not checked"
+
+
 def run_leak_check(
     real_profile: Dict,
     real_csv: str,
@@ -142,33 +163,62 @@ def run_leak_check(
     allow: List[str],
     extra_columns: List[str],
 ) -> Dict:
-    """Count simulated values equal to a real value, per column (string compare
-    after trim). Returns only counts. Raises ValueError for unknown columns."""
+    """Count simulated values equal to a real value, per column. Returns only
+    counts. Raises ValueError for unknown columns.
+
+    Checked: profile columns that are identifier, free_text or categorical;
+    named columns; and any column in both CSVs that the profile lacks. A
+    simulated column the profile lacks and real.csv lacks cannot be checked, so
+    it fails unless allowed. Matching ignores case and surrounding spaces, and
+    leading zeros on all-digit values."""
     profile_cols = real_profile["columns"]
-    unknown = [c for c in extra_columns + allow if c not in profile_cols]
-    if unknown:
-        raise ValueError(f"column(s) not found in the profile: {sorted(set(unknown))}")
+    real_header = read_header(real_csv, encoding)
+    sim_header = read_header(simulated_csv)
+
+    unknown_extra = [
+        c for c in extra_columns
+        if c not in profile_cols and not (c in real_header and c in sim_header)
+    ]
+    if unknown_extra:
+        raise ValueError(
+            f"--leak-check-columns not in the profile or not in both CSVs: {sorted(set(unknown_extra))}"
+        )
+    unknown_allow = [c for c in allow if c not in profile_cols and c not in sim_header]
+    if unknown_allow:
+        raise ValueError(f"--allow-real-values not found in the profile or simulated file: {sorted(set(unknown_allow))}")
 
     to_check: List[str] = []
     for c in real_profile["meta"]["column_order"]:
         if profile_cols[c]["dtype"] in LEAK_CHECK_DTYPES or c in extra_columns:
             to_check.append(c)
+    for c in sim_header:  # columns the profile does not know about
+        if c not in profile_cols and c in real_header and c not in to_check:
+            to_check.append(c)
+    unchecked = [c for c in sim_header if c not in profile_cols and c not in real_header]
 
     real_raw = read_columns_from_csv(real_csv, to_check, encoding)
     sim_raw = read_columns_from_csv(simulated_csv, to_check)
 
     columns: Dict[str, Dict] = {}
     for c in to_check:
-        real_values = {v.strip() for v in real_raw[c]}
-        sim_values = [v.strip() for v in sim_raw[c]]
-        matching = sum(1 for v in sim_values if v in real_values)
+        real_keys = set()
+        for v in real_raw[c]:
+            real_keys.update(match_keys(v))
+        matching = sum(1 for v in sim_raw[c] if any(k in real_keys for k in match_keys(v)))
         columns[c] = {
-            "dtype": profile_cols[c]["dtype"],
-            "checked": len(sim_values),
+            "dtype": profile_cols[c]["dtype"] if c in profile_cols else "unprofiled",
+            "checked": len(sim_raw[c]),
             "matching": matching,
             "allowed": c in allow,
         }
-    failing = [c for c, e in columns.items() if e["matching"] > 0 and not e["allowed"]]
+    for c in unchecked:
+        columns[c] = {"dtype": "unprofiled", "checked": 0, "matching": 0,
+                      "allowed": c in allow, "status": NOT_CHECKED}
+
+    failing = [
+        c for c, e in columns.items()
+        if not e["allowed"] and (e["matching"] > 0 or e.get("status") == NOT_CHECKED)
+    ]
     return {"columns": columns, "failing_columns": len(failing), "passed": not failing}
 
 
@@ -179,9 +229,10 @@ def print_leak_check(leak: Dict) -> None:
     print(header)
     print("-" * len(header))
     for name, e in leak["columns"].items():
-        print(f"{name:30} {e['dtype']:12} {e['checked']:>10} {e['matching']:>10} {str(e['allowed']):>8}")
-        log.info("leak check %s: checked=%d matching=%d allowed=%s",
-                 name, e["checked"], e["matching"], e["allowed"])
+        note = f"  {e['status']}" if "status" in e else ""
+        print(f"{name:30} {e['dtype']:12} {e['checked']:>10} {e['matching']:>10} {str(e['allowed']):>8}{note}")
+        log.info("leak check %s: checked=%d matching=%d allowed=%s%s",
+                 name, e["checked"], e["matching"], e["allowed"], note)
 
 
 def print_report(report: Dict) -> None:
