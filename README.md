@@ -51,8 +51,8 @@ python -m simulset.profile_dataset --input real.csv --output profile.json --log-
 
 Column types, in the order they are checked:
 
-- A column where every value is missing (blank, `NA`, `N/A`, `null`, `None`, `.`,
-  any case) is `empty`: the profile records only `dtype` and `missing_rate` 1.0,
+- A column where every value is missing (blank, `NA`, `N/A`, `null`, `None`, `NaN`, `.`,
+  any case, trimmed) is `empty`: the profile records only `dtype` and `missing_rate` 1.0,
   generation writes it as all blanks (even if named in `--use-real-values`), and
   validate and the leak check handle it (nothing to match). A WARNING names it.
 - **All-digit ID/code columns** (at least 98% of non-missing values,
@@ -68,6 +68,12 @@ Column types, in the order they are checked:
   values there are. Values stay strings so leading zeros survive. Each such
   column logs a WARNING with its new type and the reason. Decimals, negatives
   and variable-length short numbers with plenty of repeats (counts, ages) stay numeric.
+- Missing markers (the list above) count as missing in every column, not only
+  for the `empty` type. `-nan`/`+nan` are markers too, and `inf`, `-inf`,
+  `Infinity` and values like `1e999` are never read as numbers. They count as
+  unparseable, not missing: under 2% of a column, those rows are generated as
+  ordinary numbers; over 2%, the column stops being numeric (for example it
+  becomes `free_text`).
 - Then numeric, date, categorical, identifier, free_text as before.
 
 Whole-dollar amounts that are almost all distinct (95% or more) also become
@@ -215,6 +221,8 @@ simulset/
   patterns aren't modeled (Phase 2).
 - An all-empty column is profiled as `empty` and generated as all blanks; it
   carries no type, so if a later extract fills it, profile again.
+- A real label spelled like a missing marker (`NA`, `Na` for sodium, `NaN`,
+  `None`) is read as missing.
 - Date columns don't re-weight for weekday/month seasonality (Phase 2).
 - No config-file input or per-column strategy overrides (Phase 3).
 - Both profiling and generation currently load full columns into memory
