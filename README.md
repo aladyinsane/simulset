@@ -189,6 +189,29 @@ the stats diff leaves out `min`, `max` and `median` (literal values) and the
 profiler's DEBUG stats line stays out of the log. Without `--real-csv`, validate
 still prints real min, max and median and logs real labels, as before.
 
+## What the output counts as
+
+The real input and everything simulset writes about it stay as protected as the
+real data, for good: `real.csv`, `profile.json`, the category mapping file, the
+validation report and the log files.
+
+The output CSV is free to use (shared, committed, read by AI tools, used as test
+fixtures) only after a release check, done by a person where the real data lives:
+
+1. No column went through `--use-real-values` ([Stage 2](#stage-2-generate))
+   unless the data owner approved that column by name because its values are public.
+2. The [leak check](#leak-check) ends `LEAK CHECK: PASS`. Name any ID or code
+   column simulset left numeric in `--leak-check-columns`.
+3. Number and date values at or near the real min or max that could point to one
+   person or case are capped or approved by the data owner.
+4. The file travels alone, with none of the side files.
+
+Record the check (date, simulset commit, seed, who checked) next to wherever the
+file is used.
+
+Until a file passes, treat it like the real data. Output from running code on a
+released file is free to use too.
+
 ## Layout
 
 ```

@@ -14,6 +14,7 @@
 
 ## Done
 
+- README section "What the output counts as": the release check for output CSVs and what stays protected (docs PR).
 - how-we-work now matches these fixes: PR #13 (the release rule and the all-digit step) and PR #14 (empty columns and the NaN markers), both merged.
 - `NaN`, `-nan` and `+nan` (any case, trimmed) are missing markers, and infinity values (`inf`, `Infinity`, `1e999`) are never read as numbers, so all-`NaN` columns are `empty` and stray `NaN`s in number columns count as missing (PR #7).
 - All-empty columns: new `empty` type, profiled with missing_rate 1.0, generated as blanks, handled by validate and the leak check (PR #6).
