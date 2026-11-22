@@ -14,6 +14,7 @@ DATE = "date"
 CATEGORICAL = "categorical"
 IDENTIFIER = "identifier"
 FREE_TEXT = "free_text"
+EMPTY = "empty"  # every value missing
 
 # Sentinels commonly used for "missing" in CSVs exported from SAS (which uses "."
 # for a missing numeric value) and other common conventions.
@@ -118,8 +119,8 @@ def classify_column(
     n_non_null = len(non_null)
 
     if n_non_null == 0:
-        log.warning("%s: column is entirely missing/empty; defaulting to numeric/float", name)
-        return ColumnClassification(dtype=NUMERIC, subtype="float", n_non_null=0)
+        log.warning("%s: column is entirely missing/empty; classified as empty (generated as all blanks)", name)
+        return ColumnClassification(dtype=EMPTY, n_non_null=0)
 
     if not force_numeric:
         trimmed = [v.strip() for v in non_null]

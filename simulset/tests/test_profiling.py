@@ -39,9 +39,9 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(cls.dtype, classify.NUMERIC)
         self.assertEqual(cls.n_non_null, 20)
 
-    def test_all_missing_defaults_numeric(self):
+    def test_all_missing_is_empty(self):
         cls = classify.classify_column("x", ["", "", "."])
-        self.assertEqual(cls.dtype, classify.NUMERIC)
+        self.assertEqual(cls.dtype, classify.EMPTY)
         self.assertEqual(cls.n_non_null, 0)
 
 

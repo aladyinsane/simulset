@@ -80,7 +80,10 @@ def profile_columns(
         )
         missing_rate = 1.0 - (cls.n_non_null / row_count) if row_count else 0.0
 
-        if cls.dtype == classify.NUMERIC:
+        if cls.dtype == classify.EMPTY:
+            col_stats = {"dtype": "empty"}
+            missing_rate = 1.0
+        elif cls.dtype == classify.NUMERIC:
             parsed = [classify.try_parse_number(v) for v in cls.non_null_values]
             col_stats = stats.numeric_stats(name, parsed, cls.non_null_values)
             col_stats["subtype"] = cls.subtype
@@ -104,7 +107,9 @@ def profile_columns(
         profile[name] = col_stats
 
         log.info("%s: classified as %s (missing_rate=%.4f)", name, cls.dtype, missing_rate)
-        if missing_rate > 0.5:
+        if cls.dtype == classify.EMPTY and name in treat_as_number:
+            log.warning("%s: --treat-as-number had no effect because the column is empty", name)
+        if missing_rate > 0.5 and cls.dtype != classify.EMPTY:  # empty already warned in classify
             log.warning("%s: high missing rate (%.1f%%)", name, missing_rate * 100)
         log.debug("%s: stats=%s", name, {k: v for k, v in col_stats.items() if k not in
                                           ("empirical_quantiles", "empirical_quantiles_epoch_day")})

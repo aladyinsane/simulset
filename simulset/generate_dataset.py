@@ -138,7 +138,7 @@ def main(argv=None) -> int:
             return 1
     use_real_values_set = set(use_real_values)
 
-    needs_raw_csv = [c for c in use_real_values if columns_profile[c]["dtype"] != "categorical"]
+    needs_raw_csv = [c for c in use_real_values if columns_profile[c]["dtype"] not in ("categorical", "empty")]
     real_raw: Dict[str, List[str]] = {}
     if needs_raw_csv:
         if not args.real_csv:
@@ -207,6 +207,13 @@ def main(argv=None) -> int:
     for col in column_order:
         col_profile = columns_profile[col]
         dtype = col_profile["dtype"]
+
+        if dtype == "empty":
+            if col in use_real_values_set:
+                log.warning("%s: column is empty in the profile; --use-real-values ignored, writing blanks", col)
+            generated[col] = [None] * args.n_records
+            log.info("%s: strategy=all-blank", col)
+            continue
 
         if col in use_real_values_set:
             if dtype == "categorical":
