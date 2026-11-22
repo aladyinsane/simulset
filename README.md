@@ -51,8 +51,8 @@ python -m simulset.profile_dataset --input real.csv --output profile.json --log-
 
 Column types, in the order they are checked:
 
-- **All-digit ID/code columns** (every non-missing value, trimmed, is only
-  digits) are never numeric when at least one of these holds: some value has a
+- **All-digit ID/code columns** (at least 98% of non-missing values,
+  trimmed, are only digits) are never numeric when at least one of these holds: some value has a
   leading zero; every value has the same length and it is 5 or more; distinct
   values are 95% or more of the non-missing values (this last test only applies
   with at least 50 non-missing values). At least 98% of values must be all

@@ -129,17 +129,23 @@ def classify_column(
             n_unique = len(set(trimmed))
             ratio = n_unique / n_non_null
             dtype = IDENTIFIER if ratio >= NEAR_UNIQUE_RATIO else CATEGORICAL
+            n_not_digits = n_non_null - len(digit_values)
             log.warning(
-                "%s: all-digit column (%s); classified as %s instead of numeric so "
-                "real values are not reproduced. If this is a real number column, "
-                "re-run profiling with --treat-as-number %s.",
-                name, reason, dtype, name,
+                "%s: all-digit column (%s; %d of %d values were not digits); classified as %s "
+                "instead of numeric so real values are not reproduced. If this is a real number "
+                "column, re-run profiling with --treat-as-number %s.",
+                name, reason, n_not_digits, n_non_null, dtype, name,
             )
+            if dtype == IDENTIFIER:
+                # Identifier stats and patterns use the digit values only, so counts match them.
+                values = digit_values
+                n_unique = len(set(values))
+            else:
+                values = trimmed
             return ColumnClassification(
                 dtype=dtype, n_non_null=n_non_null, n_unique=n_unique,
-                cardinality_ratio=ratio, is_fully_unique=n_unique == n_non_null,
-                # Identifier patterns come from the digit values only.
-                non_null_values=digit_values if dtype == IDENTIFIER else trimmed,
+                cardinality_ratio=ratio, is_fully_unique=n_unique == len(values),
+                non_null_values=values,
             )
 
     numeric_hits = sum(1 for v in non_null if try_parse_number(v) is not None)

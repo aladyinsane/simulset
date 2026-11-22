@@ -72,6 +72,14 @@ class TestIntegerCodeClassification(unittest.TestCase):
         self.assertEqual(cls.dtype, classify.IDENTIFIER)
         self.assertNotIn("UNKNOWN", cls.non_null_values)
         self.assertTrue(all(len(v) == 9 for v in cls.non_null_values))
+        self.assertEqual(cls.n_unique, len(set(cls.non_null_values)))
+        self.assertLessEqual(cls.n_unique, len(cls.non_null_values))
+
+    def test_warning_counts_non_digit_values(self):
+        ids = [f"{i:09d}" for i in range(1, 400, 2)] + ["UNKNOWN"]
+        with self.assertLogs("simulset.profiling.classify", level="WARNING") as cm:
+            classify.classify_column("id", ids)
+        self.assertIn("1 of 201 values were not digits", cm.output[0])
 
     def test_zip_plus_four_in_zip_column_keeps_categorical(self):
         zips = ["02134", "10001", "60601"] * 100 + ["10001-1234"]
