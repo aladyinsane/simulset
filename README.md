@@ -140,6 +140,32 @@ Re-profiles `simulated.csv` and prints/logs a side-by-side diff against
 `profile.json`, including a correlation-matrix diff - the main check that
 the copula step actually preserved cross-column relationships.
 
+### Leak check
+
+Run this in the secure environment, where the real CSV is, to prove the output
+holds no real value:
+
+```
+python -m simulset.validate_dataset --profile profile.json --simulated simulated.csv \
+  --real-csv real.csv --allow-real-values state_code --leak-check-columns amount \
+  --report report.json --log-file validate.log
+```
+
+For every column the profile classifies as identifier, free_text or categorical,
+plus any named in `--leak-check-columns`, it counts simulated values equal to a
+real value in that column (string compare after trimming). `--allow-real-values`
+lists columns where that is expected (for example ones you passed to
+`generate_dataset --use-real-values`). `--input-encoding` works as in the other
+stages. Only counts are printed, logged and written to the `leak_check` section
+of `report.json`: column, number checked, number matching, whether allowed. The
+last line is `LEAK CHECK: PASS` or `LEAK CHECK: FAIL (n columns)`, and the exit
+code is 1 on a fail. A named column missing from the profile or either CSV is an
+error. Without `--real-csv`, validate behaves as before.
+
+Because the output may be pasted elsewhere, when `--real-csv` is given the stats
+diff leaves out `min`, `max` and `median` (they are literal values), and the
+profiler's DEBUG stats line is kept out of the log.
+
 ## Layout
 
 ```
