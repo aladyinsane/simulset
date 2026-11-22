@@ -10,10 +10,11 @@
 
 ## Ready
 
-- After the fixes are released, open a how-we-work PR to relax the step in its `docs/data-and-ai.md` that says to drop these columns before profiling.
+- (none)
 
 ## Done
 
+- how-we-work now matches these fixes: PR #13 (the release rule and the all-digit step) and PR #14 (empty columns and the NaN markers), both merged.
 - `NaN`, `-nan` and `+nan` (any case, trimmed) are missing markers, and infinity values (`inf`, `Infinity`, `1e999`) are never read as numbers, so all-`NaN` columns are `empty` and stray `NaN`s in number columns count as missing (PR #7).
 - All-empty columns: new `empty` type, profiled with missing_rate 1.0, generated as blanks, handled by validate and the leak check (PR #6).
 - Leak check in `validate_dataset`: `--real-csv`, `--allow-real-values`, `--leak-check-columns`, counts only, exit 1 on a match (PR #5). Matching ignores case, spaces and leading zeros on all-digit values; columns the profile lacks are checked, or fail if not in `real.csv`.
