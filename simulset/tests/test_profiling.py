@@ -6,10 +6,10 @@ from ..profiling import classify, patterns, stats
 
 class TestClassify(unittest.TestCase):
     def test_numeric_column(self):
-        cls = classify.classify_column("age", ["1", "2", "3", "", "4"])
+        cls = classify.classify_column("age", ["1", "2", "3", "", "4", "1", "2", "3", "4", "2"])
         self.assertEqual(cls.dtype, classify.NUMERIC)
         self.assertEqual(cls.subtype, "integer")
-        self.assertEqual(cls.n_non_null, 4)
+        self.assertEqual(cls.n_non_null, 9)
 
     def test_float_column(self):
         cls = classify.classify_column("cost", ["1.50", "2.00", "3.75"])
@@ -35,9 +35,9 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(cls.dtype, classify.FREE_TEXT)
 
     def test_sas_missing_marker(self):
-        cls = classify.classify_column("x", ["1", ".", "2", "3"])
+        cls = classify.classify_column("x", ["1", ".", "2", "3", "1", "2", "3", "1", "2", "3", "1", "2", "3", "1", "2", "3", "1", "2", "3", "1", "2"])
         self.assertEqual(cls.dtype, classify.NUMERIC)
-        self.assertEqual(cls.n_non_null, 3)
+        self.assertEqual(cls.n_non_null, 20)
 
     def test_all_missing_defaults_numeric(self):
         cls = classify.classify_column("x", ["", "", "."])

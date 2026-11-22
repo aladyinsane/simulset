@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -77,11 +77,42 @@ class ColumnClassification:
     non_null_values: List[str] = field(default_factory=list)
 
 
+# distinct / non-missing at or above this makes an all-digit column a
+# pattern-generated identifier rather than a categorical code.
+NEAR_UNIQUE_RATIO = 0.95
+# Same-length all-digit columns this long or longer are codes, not numbers.
+MIN_FIXED_CODE_LENGTH = 5
+
+
+# The distinct-ratio rule needs enough rows to mean anything: in a tiny table
+# every count or age is "unique".
+MIN_ROWS_FOR_RATIO_RULE = 50
+
+
+def integer_code_reason(values: List[str]) -> Optional[Tuple[str, List[str]]]:
+    """If `values` (non-missing, trimmed) is an integer-formatted ID/code column,
+    return (reason, the all-digit values); otherwise None. At least
+    PARSE_THRESHOLD of the values must be all digits, so a few dirty values
+    (UNKNOWN, -1, ZIP+4) do not turn the rule off. Decimals, negatives and
+    short variable-length numbers stay numeric."""
+    digits = [v for v in values if v.isascii() and v.isdigit()]
+    if not values or len(digits) / len(values) < PARSE_THRESHOLD:
+        return None
+    if any(len(v) > 1 and v.startswith("0") for v in digits):
+        return "has leading zeros", digits
+    if len({len(v) for v in digits}) == 1 and len(digits[0]) >= MIN_FIXED_CODE_LENGTH:
+        return f"all digit values are {len(digits[0])} digits long", digits
+    if len(values) >= MIN_ROWS_FOR_RATIO_RULE and len(set(values)) / len(values) >= NEAR_UNIQUE_RATIO:
+        return "values are almost all distinct", digits
+    return None
+
+
 def classify_column(
     name: str,
     raw_values: List[Optional[str]],
     categorical_max_unique: int = 50,
     categorical_max_ratio: float = 0.05,
+    force_numeric: bool = False,
 ) -> ColumnClassification:
     non_null = [v for v in raw_values if not is_missing(v)]
     n_non_null = len(non_null)
@@ -89,6 +120,33 @@ def classify_column(
     if n_non_null == 0:
         log.warning("%s: column is entirely missing/empty; defaulting to numeric/float", name)
         return ColumnClassification(dtype=NUMERIC, subtype="float", n_non_null=0)
+
+    if not force_numeric:
+        trimmed = [v.strip() for v in non_null]
+        found = integer_code_reason(trimmed)
+        if found:
+            reason, digit_values = found
+            n_unique = len(set(trimmed))
+            ratio = n_unique / n_non_null
+            dtype = IDENTIFIER if ratio >= NEAR_UNIQUE_RATIO else CATEGORICAL
+            n_not_digits = n_non_null - len(digit_values)
+            log.warning(
+                "%s: all-digit column (%s; %d of %d values were not digits); classified as %s "
+                "instead of numeric so real values are not reproduced. If this is a real number "
+                "column, re-run profiling with --treat-as-number %s.",
+                name, reason, n_not_digits, n_non_null, dtype, name,
+            )
+            if dtype == IDENTIFIER:
+                # Identifier stats and patterns use the digit values only, so counts match them.
+                values = digit_values
+                n_unique = len(set(values))
+            else:
+                values = trimmed
+            return ColumnClassification(
+                dtype=dtype, n_non_null=n_non_null, n_unique=n_unique,
+                cardinality_ratio=ratio, is_fully_unique=n_unique == len(values),
+                non_null_values=values,
+            )
 
     numeric_hits = sum(1 for v in non_null if try_parse_number(v) is not None)
     if numeric_hits / n_non_null >= PARSE_THRESHOLD:

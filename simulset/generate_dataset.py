@@ -91,7 +91,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--use-real-values", default="",
                          help="Comma-separated columns to bootstrap-sample literal real values for")
     parser.add_argument("--real-csv", default=None,
-                         help="Path to the real CSV; required if a non-categorical column is in --use-real-values")
+                         help="Path to the real CSV; required if a non-categorical column is in --use-real-values. "
+                              "Also used so no identifier/free_text value equals a real one "
+                              "(real values are read here only, never stored or logged)")
     parser.add_argument("--input-encoding", default="utf-8-sig",
                          help="Encoding of --real-csv (default utf-8-sig). SAS PROC EXPORT's output "
                               "encoding matches the SAS session encoding, not utf-8 - check yours "
@@ -151,6 +153,27 @@ def main(argv=None) -> int:
         except (OSError, ValueError) as exc:
             log.error("Failed to read --real-csv for flagged columns: %s", exc)
             return 1
+
+    # Real values of identifier/free_text columns, used only to reject collisions.
+    forbidden: Dict[str, set] = {}
+    pattern_cols = [
+        c for c in column_order
+        if columns_profile[c]["dtype"] in ("identifier", "free_text") and c not in use_real_values_set
+    ]
+    if args.real_csv and pattern_cols:
+        try:
+            raw = read_columns_from_csv(args.real_csv, pattern_cols, args.input_encoding)
+        except (OSError, ValueError) as exc:
+            log.error("Failed to read --real-csv for identifier columns: %s", exc)
+            return 1
+        forbidden = {c: {v.strip() for v in vals} for c, vals in raw.items()}
+        del raw
+    else:
+        for c in pattern_cols:
+            log.warning(
+                "%s: --real-csv not given, so collisions with real values were not prevented. "
+                "Run the leak check before using this output.", c,
+            )
 
     seed = args.seed
     np_rng = np.random.default_rng(seed)
@@ -220,15 +243,20 @@ def main(argv=None) -> int:
             values = identifiers.generate(
                 col, col_profile, args.n_records, py_rng,
                 enforce_unique=col_profile.get("is_fully_unique", False),
+                forbidden=forbidden.get(col),
             )
             strategy = "pattern-generated"
 
         else:  # free_text
-            values = identifiers.generate(col, col_profile, args.n_records, py_rng, enforce_unique=False)
+            values = identifiers.generate(
+                col, col_profile, args.n_records, py_rng, enforce_unique=False,
+                forbidden=forbidden.get(col),
+            )
             strategy = "pattern-generated"
 
         log.info("%s: strategy=%s", col, strategy)
-        log.debug("%s: sample=%s", col, values[:5])
+        if dtype not in ("identifier", "free_text"):  # without --real-csv these could be real values
+            log.debug("%s: sample=%s", col, values[:5])
 
         values = missingness.inject(values, col_profile.get("missing_rate", 0.0), py_rng)
         generated[col] = values

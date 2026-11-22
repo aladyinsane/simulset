@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import random
 import string
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +49,10 @@ def generate(
     n_records: int,
     rng: random.Random,
     enforce_unique: bool = False,
+    forbidden: Optional[Set[str]] = None,
 ) -> List[str]:
+    """`forbidden` holds real values (trimmed) that no output value may equal.
+    It is only compared against, never logged or stored."""
     template = col_profile.get("pattern_template")
     length_stats = col_profile.get("length_stats", {"min": 8, "max": 8})
     length_min, length_max = length_stats["min"], length_stats["max"]
@@ -58,15 +61,28 @@ def generate(
     seen = set() if enforce_unique else None
     collisions = 0
     forced_suffix = 0
+    rejected = 0
+    forbidden_fallbacks = 0
 
     for _ in range(n_records):
         candidate = _generate_one(template, length_min, length_max, rng)
-        if enforce_unique:
-            attempts = 0
-            while candidate in seen and attempts < MAX_UNIQUE_RETRIES:
-                candidate = _generate_one(template, length_min, length_max, rng)
-                attempts += 1
+        attempts = 0
+        while attempts < MAX_UNIQUE_RETRIES:
+            hits_real = bool(forbidden) and candidate in forbidden
+            repeats = enforce_unique and candidate in seen
+            if not (hits_real or repeats):
+                break
+            if hits_real:
+                rejected += 1
+            else:
                 collisions += 1
+            candidate = _generate_one(template, length_min, length_max, rng)
+            attempts += 1
+        if forbidden and candidate in forbidden:
+            # Real values fill the pattern space; break the pattern rather than leak.
+            forbidden_fallbacks += 1
+            candidate = f"{candidate}x{forbidden_fallbacks}"
+        if enforce_unique:
             if candidate in seen:
                 # Pattern space exhausted relative to n_records - force
                 # uniqueness with a suffix rather than looping forever.
@@ -75,6 +91,14 @@ def generate(
             seen.add(candidate)
         values.append(candidate)
 
+    if rejected:
+        log.info("%s: rejected %d candidate(s) that matched a real value", col_name, rejected)
+    if forbidden_fallbacks:
+        log.warning(
+            "%s: real values fill the pattern space; %d value(s) got a suffix so they do "
+            "not equal a real value",
+            col_name, forbidden_fallbacks,
+        )
     if collisions:
         log.warning(
             "%s: %d uniqueness collisions during identifier generation (retried)",
