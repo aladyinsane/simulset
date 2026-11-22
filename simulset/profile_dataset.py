@@ -107,7 +107,9 @@ def profile_columns(
         profile[name] = col_stats
 
         log.info("%s: classified as %s (missing_rate=%.4f)", name, cls.dtype, missing_rate)
-        if missing_rate > 0.5:
+        if cls.dtype == classify.EMPTY and name in treat_as_number:
+            log.warning("%s: --treat-as-number had no effect because the column is empty", name)
+        if missing_rate > 0.5 and cls.dtype != classify.EMPTY:  # empty already warned in classify
             log.warning("%s: high missing rate (%.1f%%)", name, missing_rate * 100)
         log.debug("%s: stats=%s", name, {k: v for k, v in col_stats.items() if k not in
                                           ("empirical_quantiles", "empirical_quantiles_epoch_day")})

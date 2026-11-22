@@ -10,6 +10,7 @@
 
 ## Ready
 
+- **All-`NaN` column crashes profiling.** A column of all `NaN` (not a missing marker) passes the empty check and stops profiling with "cannot convert float NaN to integer" (also on main). Done when a test with an all-`NaN` column profiles and generates without error. Found by qa-peer, 2026-11-22.
 - After the fixes are released, open a how-we-work PR to relax the step in its `docs/data-and-ai.md` that says to drop these columns before profiling.
 
 ## Done

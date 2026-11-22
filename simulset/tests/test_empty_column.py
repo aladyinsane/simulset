@@ -86,11 +86,22 @@ class TestEmptyEndToEnd(unittest.TestCase):
         self.assertEqual(profile_dataset.main(
             ["--input", self.p("real.csv"), "--output", self.p("profile.json")]), 0)
         self.assertEqual(generate_dataset.main([
-            "--profile", self.p("profile.json"), "--n-records", "50", "--seed", "1",
+            "--profile", self.p("profile.json"), "--n-records", "300", "--seed", "1",
             "--output", self.p("sim.csv"),
         ]), 0)
         sim = self._read(self.p("sim.csv"))
+        # missing rate 299/300 over 300 rows leaves exactly one value
+        self.assertEqual([r["one_value"] for r in sim].count("5"), 1)
         self.assertTrue(all(r["one_value"] in ("", "5") for r in sim))
+
+    def test_empty_column_logs_one_warning_and_notes_treat_as_number(self):
+        with self.assertLogs("simulset", level="WARNING") as cm:
+            profile_dataset.main(["--input", self.p("real.csv"), "--output", self.p("profile.json"),
+                                  "--treat-as-number", "blank"])
+        blank = [m for m in cm.output if "blank:" in m]
+        self.assertEqual(len([m for m in blank if "high missing rate" in m]), 0)
+        self.assertEqual(len([m for m in blank if "classified as empty" in m]), 1)
+        self.assertEqual(len([m for m in blank if "--treat-as-number had no effect" in m]), 1)
 
 
 if __name__ == "__main__":

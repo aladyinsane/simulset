@@ -51,6 +51,10 @@ python -m simulset.profile_dataset --input real.csv --output profile.json --log-
 
 Column types, in the order they are checked:
 
+- A column where every value is missing (blank, `NA`, `N/A`, `null`, `None`, `.`,
+  any case) is `empty`: the profile records only `dtype` and `missing_rate` 1.0,
+  generation writes it as all blanks (even if named in `--use-real-values`), and
+  validate and the leak check handle it (nothing to match). A WARNING names it.
 - **All-digit ID/code columns** (at least 98% of non-missing values,
   trimmed, are only digits) are never numeric when at least one of these holds: some value has a
   leading zero; every value has the same length and it is 5 or more; distinct
@@ -64,10 +68,6 @@ Column types, in the order they are checked:
   values there are. Values stay strings so leading zeros survive. Each such
   column logs a WARNING with its new type and the reason. Decimals, negatives
   and variable-length short numbers with plenty of repeats (counts, ages) stay numeric.
-- A column where every value is missing (blank, `NA`, `N/A`, `null`, `None`, `.`,
-  any case) is `empty`: the profile records only `dtype` and `missing_rate` 1.0,
-  generation writes it as all blanks (even if named in `--use-real-values`), and
-  validate and the leak check handle it (nothing to match). A WARNING names it.
 - Then numeric, date, categorical, identifier, free_text as before.
 
 Whole-dollar amounts that are almost all distinct (95% or more) also become
@@ -213,6 +213,8 @@ simulset/
 
 - Missingness is injected independently per column; joint/co-missingness
   patterns aren't modeled (Phase 2).
+- An all-empty column is profiled as `empty` and generated as all blanks; it
+  carries no type, so if a later extract fills it, profile again.
 - Date columns don't re-weight for weekday/month seasonality (Phase 2).
 - No config-file input or per-column strategy overrides (Phase 3).
 - Both profiling and generation currently load full columns into memory
