@@ -18,7 +18,7 @@ EMPTY = "empty"  # every value missing
 
 # Sentinels commonly used for "missing" in CSVs exported from SAS (which uses "."
 # for a missing numeric value) and other common conventions.
-MISSING_MARKERS = {"", "na", "n/a", "null", "none", "."}
+MISSING_MARKERS = {"", "na", "n/a", "null", "none", ".", "nan"}
 
 DATE_FORMATS = [
     "%Y-%m-%d",

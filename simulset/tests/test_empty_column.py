@@ -104,5 +104,56 @@ class TestEmptyEndToEnd(unittest.TestCase):
         self.assertEqual(len([m for m in blank if "--treat-as-number had no effect" in m]), 1)
 
 
+class TestNanMarker(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self.tmp.cleanup)
+        rng = random.Random(8)
+        self.rows = [
+            [f"{i:07d}", rng.randint(1, 500), "NaN" if i % 2 else " nan ",
+             "NAN" if i % 10 == 0 else rng.randint(18, 90)]
+            for i in range(200)
+        ]
+        with open(self.p("real.csv"), "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["member_id", "amount", "all_nan", "age"])
+            w.writerows(self.rows)
+
+    def p(self, name):
+        return os.path.join(self.tmp.name, name)
+
+    def test_nan_is_a_missing_marker(self):
+        for v in ("NaN", "nan", " NAN "):
+            self.assertTrue(classify.is_missing(v))
+        self.assertEqual(classify.classify_column("x", ["nan", "NaN"]).dtype, classify.EMPTY)
+
+    def test_numeric_with_nans_keeps_type_and_missing_rate(self):
+        self.assertEqual(profile_dataset.main(
+            ["--input", self.p("real.csv"), "--output", self.p("profile.json")]), 0)
+        with open(self.p("profile.json"), encoding="utf-8") as f:
+            cols = json.load(f)["columns"]
+        self.assertEqual(cols["age"]["dtype"], "numeric")
+        self.assertAlmostEqual(cols["age"]["missing_rate"], 0.1)
+        self.assertEqual(cols["all_nan"], {"dtype": "empty", "missing_rate": 1.0})
+
+    def test_all_nan_column_profiles_generates_and_validates(self):
+        self.assertEqual(profile_dataset.main(
+            ["--input", self.p("real.csv"), "--output", self.p("profile.json")]), 0)
+        self.assertEqual(generate_dataset.main([
+            "--profile", self.p("profile.json"), "--n-records", "100", "--seed", "1",
+            "--real-csv", self.p("real.csv"), "--output", self.p("sim.csv"),
+        ]), 0)
+        with open(self.p("sim.csv"), newline="", encoding="utf-8") as f:
+            self.assertTrue(all(r["all_nan"] == "" for r in csv.DictReader(f)))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = validate_dataset.main([
+                "--profile", self.p("profile.json"), "--simulated", self.p("sim.csv"),
+                "--real-csv", self.p("real.csv"), "--leak-check-columns", "all_nan",
+            ])
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.getvalue().rstrip().endswith("LEAK CHECK: PASS"))
+
+
 if __name__ == "__main__":
     unittest.main()

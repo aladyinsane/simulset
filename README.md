@@ -51,8 +51,8 @@ python -m simulset.profile_dataset --input real.csv --output profile.json --log-
 
 Column types, in the order they are checked:
 
-- A column where every value is missing (blank, `NA`, `N/A`, `null`, `None`, `.`,
-  any case) is `empty`: the profile records only `dtype` and `missing_rate` 1.0,
+- A column where every value is missing (blank, `NA`, `N/A`, `null`, `None`, `NaN`, `.`,
+  any case, trimmed) is `empty`: the profile records only `dtype` and `missing_rate` 1.0,
   generation writes it as all blanks (even if named in `--use-real-values`), and
   validate and the leak check handle it (nothing to match). A WARNING names it.
 - **All-digit ID/code columns** (at least 98% of non-missing values,
