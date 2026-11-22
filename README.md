@@ -70,7 +70,10 @@ Column types, in the order they are checked:
   and variable-length short numbers with plenty of repeats (counts, ages) stay numeric.
 - Missing markers (the list above) count as missing in every column, not only
   for the `empty` type. `-nan`/`+nan` are markers too, and `inf`, `-inf`,
-  `Infinity` and values like `1e999` are never read as numbers.
+  `Infinity` and values like `1e999` are never read as numbers. They count as
+  unparseable, not missing: under 2% of a column, those rows are generated as
+  ordinary numbers; over 2%, the column stops being numeric (for example it
+  becomes `free_text`).
 - Then numeric, date, categorical, identifier, free_text as before.
 
 Whole-dollar amounts that are almost all distinct (95% or more) also become
