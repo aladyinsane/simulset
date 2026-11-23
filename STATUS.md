@@ -10,7 +10,7 @@
 
 ## Ready
 
-- (none)
+- Reword the log line in `simulset/profiling/classify.py` (about line 160) that says values that fail to parse "will be treated as missing for stats purposes". They are left out of the stats but don't count toward missing_rate (Lauren's 2026-11-23 decision), so the message should say that.
 
 ## Done
 
