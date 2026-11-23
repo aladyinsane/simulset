@@ -2,7 +2,7 @@
 
 ## Waiting on Lauren
 
-- Should infinity values count as missing, so a number column with over 2% inf stays numeric? (default: no, they count as unparseable, as now)
+- (none)
 
 ## In progress
 
@@ -14,6 +14,7 @@
 
 ## Done
 
+- Lauren decided, 2026-11-23: infinity values stay unparseable, not missing, so a number column with over 2% inf does not stay numeric. No code change.
 - README section "What the output counts as": the release check for output CSVs and what stays protected (docs PR).
 - how-we-work now matches these fixes: PR #13 (the release rule and the all-digit step) and PR #14 (empty columns and the NaN markers), both merged.
 - `NaN`, `-nan` and `+nan` (any case, trimmed) are missing markers, and infinity values (`inf`, `Infinity`, `1e999`) are never read as numbers, so all-`NaN` columns are `empty` and stray `NaN`s in number columns count as missing (PR #7).
