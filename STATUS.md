@@ -10,7 +10,7 @@
 
 ## Ready
 
-- Reword the log line in `simulset/profiling/classify.py` (about line 160) that says values that fail to parse "will be treated as missing for stats purposes". They are left out of the stats but don't count toward missing_rate (Lauren's 2026-11-23 decision), so the message should say that.
+- Reword the two log lines in `simulset/profiling/classify.py` (numeric, about line 160, and date, about line 175) that say values that fail to parse "will be treated as missing for stats purposes". They are left out of the stats but don't count toward missing_rate, since unparseable values (including infinity) are not missing (Lauren, 2026-11-23). Check: both messages match the README's "unparseable, not missing", and `python -m unittest simulset.tests.test_empty_column` still passes.
 
 ## Done
 
