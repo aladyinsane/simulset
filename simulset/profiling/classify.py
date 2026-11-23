@@ -157,8 +157,8 @@ def classify_column(
     if numeric_hits / n_non_null >= PARSE_THRESHOLD:
         if numeric_hits != n_non_null:
             log.warning(
-                "%s: %d/%d non-null values failed to parse as numeric and will be "
-                "treated as missing for stats purposes",
+                "%s: %d/%d non-null values failed to parse as numeric; they are "
+                "left out of the stats and not counted as missing",
                 name, n_non_null - numeric_hits, n_non_null,
             )
         parseable = [v for v in non_null if try_parse_number(v) is not None]
@@ -172,8 +172,8 @@ def classify_column(
     if date_hits / n_non_null >= PARSE_THRESHOLD:
         if date_hits != n_non_null:
             log.warning(
-                "%s: %d/%d non-null values failed to parse as date and will be "
-                "treated as missing for stats purposes",
+                "%s: %d/%d non-null values failed to parse as date; they are "
+                "left out of the stats and not counted as missing",
                 name, n_non_null - date_hits, n_non_null,
             )
         parseable = [v for v in non_null if try_parse_date(v) is not None]
