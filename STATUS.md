@@ -10,7 +10,7 @@
 
 ## Ready
 
-- (none)
+- Optional, unasked: `profile.json`'s `n_non_null` leaves out unparseable values, but `missing_rate` doesn't count them as missing, so the two don't add up to `row_count`. A docs note if Lauren wants one.
 
 ## Done
 
