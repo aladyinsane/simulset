@@ -6,6 +6,8 @@ columns you name explicitly, the real values themselves in their real
 proportions. Implements Phase 1 (MVP) of
 [docs/simulated_dataset_generator_plan.md](docs/simulated_dataset_generator_plan.md).
 
+**Agent review and merge OK** (Lauren, 2026-11-25): a different agent with fresh context may merge, after a fresh qa-peer pass. No agent merges its own work.
+
 ## Pipeline
 
 ```
